@@ -124,6 +124,41 @@ cat /sandbox/.openclaw/openclaw.json | grep -A5 "auth"
 
 ---
 
+## Communication Plugins (Phase 7)
+
+### Telegram bot not responding
+**Symptom:** Messages sent to bot, no response.
+**Check:** Is `api.telegram.org` in the egress whitelist?
+```bash
+nemoclaw <n> logs --follow | grep telegram
+```
+**Common causes:** Wrong bot token, user ID not in `allowedUsers`, egress blocked.
+
+### Slack bot not responding
+**Symptom:** Messages in channel, no agent response.
+**Check:** Are all three Slack domains whitelisted (`slack.com`, `api.slack.com`, `wss-primary.slack.com`)?
+**Common causes:** Missing bot scopes (`chat:write`, `channels:read`), wrong channel ID,
+token is a user token instead of bot token (`xoxb-`).
+
+### Discord bot offline
+**Symptom:** Bot shows as offline in server.
+**Check:** Are `discord.com` and `gateway.discord.gg` whitelisted?
+**Common causes:** Bot not invited to server with correct permissions, missing Gateway Intents
+(enable Message Content Intent in Discord developer portal).
+
+### Webhook not receiving events
+**Symptom:** No payloads arriving at webhook endpoint.
+**Check:** Is the webhook domain in the egress whitelist?
+**Common causes:** Wrong URL, auth header mismatch, endpoint not accepting POST,
+HTTPS certificate issues.
+
+### Microsoft Graph authentication failing
+**Symptom:** "Unauthorized" or "InvalidAuthenticationToken" errors.
+**Check:** Is `login.microsoftonline.com` whitelisted (needed for token exchange)?
+**Common causes:** Client secret expired, wrong tenant ID, insufficient API permissions.
+
+---
+
 ## General Diagnostics
 
 ### Full debug log
@@ -139,5 +174,5 @@ docker ps
 
 ### Verify environment variables are set
 ```bash
-env | grep -E 'NVIDIA|NEMOCLAW|TAILSCALE|TELEGRAM'
+env | grep -E 'NVIDIA|NEMOCLAW|TAILSCALE|TELEGRAM|SLACK|DISCORD|MSGRAPH'
 ```

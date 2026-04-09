@@ -28,22 +28,59 @@ network:
   blockUnlisted: true
   allowedEgressHosts:
     - build.nvidia.com
-    - api.github.com
     # Add domains from Battle Plan here
 ```
 
-### 4.2 L7 HTTP Method Restrictions (Optional)
-For fine-grained control, restrict specific HTTP methods per host:
+If Tier 2A plugins were selected, include their required domains now:
+
+| Plugin | Required egress domains |
+|--------|----------------------|
+| Telegram | `api.telegram.org` |
+| Slack | `slack.com`, `api.slack.com`, `wss-primary.slack.com` |
+| Discord | `discord.com`, `gateway.discord.gg` |
+| Outlook/Graph | `graph.microsoft.com`, `login.microsoftonline.com` |
+| Custom webhook | your webhook's domain |
+
+Only add the rows that apply. Example with Telegram + Slack selected:
+```yaml
+network:
+  blockUnlisted: true
+  allowedEgressHosts:
+    - build.nvidia.com
+    - api.telegram.org
+    - slack.com
+    - api.slack.com
+    - wss-primary.slack.com
+```
+
+### 4.2 L7 HTTP Method Restrictions (Module F — Optional)
+
+Skip this section if Module F was not selected in Tier 2B.
+
+L7 restrictions let you control which HTTP methods the agent can use per host.
+This is most useful for APIs where the agent should read but never delete data.
+
+**When to use this:**
+- Enterprise APIs with destructive endpoints (Graph API, cloud provider APIs)
+- Third-party APIs where accidental writes could cause damage
+- Any host where you want read-only agent access
+
+**When to skip:**
+- Communication plugins (Telegram, Slack, Discord) — they need POST to send messages
+- `build.nvidia.com` — inference calls require POST
 
 ```yaml
 network:
   allowedEgressHosts:
     - host: docs.example.com
       protocol: rest
-      methods: [GET]       # read-only access
+      methods: [GET]           # read-only access
+    - host: graph.microsoft.com
+      protocol: rest
+      methods: [GET, POST]     # no DELETE — prevents accidental data loss
     - host: api.example.com
       protocol: rest
-      methods: [GET, POST]  # no DELETE/PUT
+      methods: [GET, POST]     # no DELETE/PUT
 ```
 
 ### 4.3 Configure Filesystem Access

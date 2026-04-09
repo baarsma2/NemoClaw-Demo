@@ -26,8 +26,35 @@ sandbox@<n>:~$ curl -s https://example.com -o /dev/null -w "%{http_code}"
 openshell term
 ```
 
-### 8.2 Test Telegram Bridge (if configured)
-Send a test message to your bot and verify response.
+### 8.2 Test Communication Plugins (if configured)
+
+For each plugin selected in Tier 2A, verify it's working:
+
+**Telegram:** Send a message to your bot in Telegram, verify response.
+```bash
+nemoclaw <n> logs --follow | grep telegram
+```
+
+**Slack:** Send a message in the configured channel, verify the agent responds.
+```bash
+nemoclaw <n> logs --follow | grep slack
+```
+
+**Discord:** Send a message in the configured channel, verify the agent responds.
+```bash
+nemoclaw <n> logs --follow | grep discord
+```
+
+**Custom webhook:** Trigger an agent action, verify the webhook endpoint receives the payload.
+```bash
+nemoclaw <n> logs --follow | grep webhook
+```
+
+**Outlook/Graph:** Test from inside the sandbox:
+```bash
+nemoclaw <n> connect
+sandbox@<n>:~$ openclaw agent --agent main --local -m "list my recent emails" --session-id test
+```
 
 ### 8.3 Test Sub-Agents (if configured)
 From inside the sandbox, trigger a sub-agent spawn and verify it completes.
