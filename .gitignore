@@ -1,2 +1,5 @@
-claude.md
-README.md
+.env
+*.log
+node_modules/
+.nemoclaw/
+credentials.json
