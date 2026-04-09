@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__github__create_or_update_file"
+    ]
+  }
+}
