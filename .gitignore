@@ -1,5 +1,12 @@
+# Project-local files — not part of the published skill
+claude.md
+CLAUDE.md
 .env
+*.env
 *.log
-node_modules/
-.nemoclaw/
-credentials.json
+
+# OS / editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
