@@ -22,7 +22,7 @@ sandbox@<n>:~$ curl -s https://build.nvidia.com -o /dev/null -w "%{http_code}"
 # 5. Test egress blocking (should fail/be blocked)
 sandbox@<n>:~$ curl -s https://example.com -o /dev/null -w "%{http_code}"
 
-# 6. Check TUI for blocked request
+# 6. Check TUI for blocked device pairing requests (NOT for Telegram users)
 openshell term
 ```
 
@@ -30,25 +30,15 @@ openshell term
 
 For each plugin selected in Tier 2A, verify it's working:
 
-**Telegram:** Send a message to your bot in Telegram, verify response.
+**Telegram:** Send a message to your bot in Telegram. If the bot replies with a pairing
+code instead of a real response, you need to approve the pairing — see Phase 7.
 ```bash
 nemoclaw <n> logs --follow | grep telegram
 ```
 
-**Slack:** Send a message in the configured channel, verify the agent responds.
-```bash
-nemoclaw <n> logs --follow | grep slack
-```
-
-**Discord:** Send a message in the configured channel, verify the agent responds.
-```bash
-nemoclaw <n> logs --follow | grep discord
-```
-
-**Custom webhook:** Trigger an agent action, verify the webhook endpoint receives the payload.
-```bash
-nemoclaw <n> logs --follow | grep webhook
-```
+**Slack / Discord / Webhook:** Send a test message and verify the agent responds.
+Check for plugin-specific pairing flows (see Phase 7 — these may have similar issues
+to Telegram).
 
 **Outlook/Graph:** Test from inside the sandbox:
 ```bash
@@ -56,67 +46,35 @@ nemoclaw <n> connect
 sandbox@<n>:~$ openclaw agent --agent main --local -m "list my recent emails" --session-id test
 ```
 
-### 8.3 Test Sub-Agents (if configured)
-From inside the sandbox, trigger a sub-agent spawn and verify it completes.
-
 ---
 
-## Audit Logging
+## Sandbox Logs
 
-### 8.4 Set Up Audit Directory
+NemoClaw writes runtime logs inside the sandbox at `/sandbox/.openclaw-data/logs/`.
+This is the canonical log location — there is no host-side aggregator by default.
+
+To stream logs from the host:
 ```bash
-mkdir -p ~/ta-agent/logs
-touch ~/ta-agent/logs/audit.json
+nemoclaw <n> logs --follow
+nemoclaw <n> logs --follow --level debug   # verbose
 ```
 
-The audit log tracks:
-- Every agent action
-- Token counts per action
-- Approval/denial status for egress requests
-- Timestamps for forensic analysis
-
-### 8.5 Monitor Audit Logs
+To inspect log files directly from inside the sandbox:
 ```bash
-tail -f ~/ta-agent/logs/audit.json | jq .
+nemoclaw <n> connect
+sandbox@<n>:~$ ls -la /sandbox/.openclaw-data/logs/
+sandbox@<n>:~$ tail -f /sandbox/.openclaw-data/logs/<logfile>
 ```
 
----
-
-## Automated Weekly Reports
-
-### 8.6 Create Summary Script
-Create `~/nemoclaw-project/weekly_summary.py`:
-
-```python
-#!/usr/bin/env python3
-"""Analyze agent performance and cost from audit logs."""
-import json
-from pathlib import Path
-from datetime import datetime, timedelta
-
-AUDIT_LOG = Path.home() / "ta-agent" / "logs" / "audit.json"
-
-def generate_summary():
-    # Read and analyze the last 7 days of audit entries
-    # Calculate: total actions, token usage, cost estimate, blocked requests
-    pass
-
-if __name__ == "__main__":
-    generate_summary()
-```
-
-### 8.7 Configure Crontab
-```bash
-crontab -e
-# Add:
-0 9 * * 1 /usr/bin/python3 ~/nemoclaw-project/weekly_summary.py >> ~/ta-agent/logs/weekly.log 2>&1
-```
+If you need a host-side aggregator or audit trail, set one up yourself — NemoClaw
+does not ship one. Common options: forward logs to CloudWatch/Datadog/Loki via a
+sidecar, or run a cron job that periodically copies log files out of the sandbox.
 
 ---
 
 ## State Migration & Blueprints
 
-### 8.8 Export Agent State
+### 8.3 Export Agent State
 NemoClaw uses a blueprint system for migrating agent state across instances.
 The export process strips credentials and verifies integrity:
 
@@ -124,15 +82,20 @@ The export process strips credentials and verifies integrity:
 - `SOUL.md` — agent's personality and behavioral patterns
 
 These files persist across migrations while credentials are re-injected in the
-target environment.
+target environment. Read `~/.nemoclaw/source/docs/workspace/backup-restore.md` for
+the canonical export/import procedure.
 
-### 8.9 Backup Strategy
+### 8.4 Backup Strategy
 ```bash
-# Regular backup of agent state (add to crontab)
+# Regular backup of agent state
 tar czf ~/backups/nemoclaw-state-$(date +%Y%m%d).tar.gz \
   ~/.nemoclaw/ \
-  ~/ta-agent/logs/ \
   ~/nemoclaw-project/.env
+```
+
+For a full sandbox backup including agent runtime data, see the canonical guide:
+```bash
+cat ~/.nemoclaw/source/docs/workspace/backup-restore.md
 ```
 
 ---
@@ -144,10 +107,14 @@ tar czf ~/backups/nemoclaw-state-$(date +%Y%m%d).tar.gz \
 | Check health | `nemoclaw <n> status` |
 | Stream logs | `nemoclaw <n> logs --follow` |
 | Debug logs | `nemoclaw <n> logs --follow --level debug` |
-| Add egress host | `nemoclaw <n> policy update --allow-host <domain>` |
-| Approve blocked request | `openshell term` (TUI) |
+| Add egress preset (interactive) | `nemoclaw <n> policy-add` |
+| Approve **device** pairing requests (NOT Telegram users) | `openshell term` |
 | Start services | `nemoclaw start` |
 | Stop services | `nemoclaw stop` |
 | Connect to sandbox | `nemoclaw <n> connect` |
 | List all sandboxes | `openshell sandbox list` |
+| Inspect sandbox | `openshell sandbox inspect <n>` |
 | Deploy to GPU | `nemoclaw deploy <instance> --sandbox <n>` |
+
+For any command not listed, check `~/.nemoclaw/source/docs/reference/commands.md`
+or run `<command> --help`.

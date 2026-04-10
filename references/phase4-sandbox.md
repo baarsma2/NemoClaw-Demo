@@ -97,28 +97,47 @@ filesystem:
 recreate the sandbox.
 
 ### 4.4 Apply the Policy
-If updating a running sandbox (network policies only — they're hot-reloadable):
+
+⚠️ **The correct command is `policy-add`, NOT `policy update --allow-host`.** That flag
+does not exist. Use the interactive preset selector:
 
 ```bash
-nemoclaw <name> policy update --allow-host <domain>
+nemoclaw <n> policy-add
 ```
 
-Or programmatically via the TypeScript API:
-```typescript
-await client.sandbox.updatePolicy(sandboxName, {
-  network: updatedPolicy,
-});
+This opens an interactive UI where you select preset policies (Telegram, Slack, GitHub,
+etc.) or add custom hosts. Each preset adds the right combination of domains, methods,
+and protocols for that integration.
+
+For the full list of available policy commands and their flags:
+```bash
+nemoclaw <n> policy --help
+# or read the canonical reference:
+cat ~/.nemoclaw/source/docs/network-policy/customize-network-policy.md
 ```
+
+### 4.4a `openclaw.json` is read-only inside the sandbox
+
+The agent config file at `/sandbox/.openclaw/openclaw.json` is owned by `root` with
+mode `444` — even the `sandbox` user cannot write to it. **Do not try to edit it from
+inside the sandbox.** All config changes must happen on the host before sandbox start,
+typically via `nemoclaw onboard`, `nemoclaw <n> policy-add`, or by re-running the wizard.
+
+The `/sandbox/.openclaw/` directory is mostly symlinks to `/sandbox/.openclaw-data/`,
+which IS writable by the sandbox user. Runtime data (credentials, logs, agent memory,
+canvas, devices, telegram state) lives in `/sandbox/.openclaw-data/` and CAN be modified.
 
 ### 4.5 Verify Egress Blocking
 From inside the sandbox, try to reach an unlisted host:
 ```bash
-nemoclaw <name> connect
-sandbox@<name>:~$ curl https://not-whitelisted.com
+nemoclaw <n> connect
+sandbox@<n>:~$ curl https://not-whitelisted.com
 # Should be blocked
 ```
 
-The blocked request will appear in `openshell term` TUI for operator approval.
+The blocked request will appear in `openshell term` TUI — but note that
+`openshell term` only handles **device** pairing approvals, not channel pairing.
+For Telegram/Slack/Discord pairing, see Phase 7.
 
 ### 4.6 Hardened Docker Image Details
 The sandbox uses `ghcr.io/nvidia/openshell-community/sandboxes/openclaw:latest`.

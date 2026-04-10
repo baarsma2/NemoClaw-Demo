@@ -3,8 +3,22 @@
 This phase covers all Tier 2A communication plugins and Tier 2B enterprise API integrations.
 Only set up the sections that were selected during the Planning interview.
 
-For every plugin: add its required domain(s) to the egress whitelist, store credentials
-in `.env` (mode 600), configure the channel in `openclaw.json`, start services, and test.
+For every plugin: add its required domain(s) to the egress whitelist (via `nemoclaw <n>
+policy-add`), store credentials in `.env` (mode 600), configure the channel in the host
+config, start services, and test.
+
+## ⚠️ Read this first: Authoritative Telegram source
+
+Before doing anything Telegram-related, check the canonical NVIDIA documentation that
+ships with every NemoClaw install:
+
+```bash
+cat ~/.nemoclaw/source/docs/deployment/set-up-telegram-bridge.md
+```
+
+This is **always more accurate than this skill file** — it's version-matched to your
+install. Read it first. The same applies for any official source docs in
+`~/.nemoclaw/source/docs/deployment/`.
 
 ---
 
@@ -14,131 +28,109 @@ in `.env` (mode 600), configure the channel in `openclaw.json`, start services, 
 
 **Egress domains needed:** `api.telegram.org`
 
-1. Create a bot: open Telegram → message `@BotFather` → `/newbot` → copy the Bot Token
-2. Find your user ID: message `@userinfobot` on Telegram
-3. Add to egress whitelist:
+#### Step 1: Create the bot
+1. Open Telegram and message `@BotFather`
+2. Send `/newbot` and follow the prompts
+3. Copy the Bot Token (`123456:ABC-DEF...`)
+4. Find your Telegram user ID by messaging `@userinfobot`
+
+#### Step 2: Add to egress whitelist
 ```bash
-nemoclaw <n> policy update --allow-host api.telegram.org
+nemoclaw <n> policy-add
+# Select the Telegram preset (or add api.telegram.org as a custom host)
 ```
-4. Configure in `openclaw.json`:
-```json
-{
-  "channels": {
-    "telegram": {
-      "token": "<BOT_TOKEN>",
-      "dmPolicy": "allowlist",
-      "allowedUsers": ["<USER_ID_1>", "<USER_ID_2>"]
-    }
-  }
-}
-```
-5. Start and test:
+
+#### Step 3: Configure the channel
+The Telegram bot config happens on the host before sandbox start, typically via
+`nemoclaw onboard` or by re-running it. You cannot edit `openclaw.json` from inside
+the sandbox — it's root-owned and mode 444.
+
+#### Step 4: Start services
 ```bash
 nemoclaw start
 nemoclaw <n> logs --follow | grep telegram
 ```
-Send a message to your bot — verify it appears in logs and gets a response.
 
----
+#### Step 5: ⚠️ Understand the pairing flow before testing
 
-### Slack
+**The default `dmPolicy` is `pairing`.** This means new Telegram users must be explicitly
+approved before the bot will respond to them. The bot will NOT respond to messages from
+unknown users — it will instead generate a pairing code and queue an approval request.
 
-**Egress domains needed:** `slack.com`, `api.slack.com`, `wss-primary.slack.com`
+**Expected flow:**
+1. You DM the bot for the first time
+2. The bot replies with a pairing code (e.g., `AWHDVVKK`)
+3. Operator (you) approves the pairing
+4. From that point on, the bot responds normally to that user
 
-1. Create a Slack App at https://api.slack.com/apps → "Create New App"
-2. Under OAuth & Permissions, add bot scopes: `chat:write`, `channels:read`, `im:read`, `im:write`
-3. Install to workspace → copy Bot User OAuth Token (`xoxb-xxxx`)
-4. Get your workspace ID and channel ID(s) from Slack (right-click channel → "Copy link")
-5. Add to egress whitelist:
+If you skip step 3, the bot will appear "broken" — it acknowledges your message but
+never replies to actual prompts. **This is by design**, not a bug.
+
+#### Step 6: Approve the pairing — three methods
+
+⚠️ **DO NOT use the Control UI WebSocket or `device.pair.approve` RPC methods.** Those
+are for **device** pairing (browser/CLI clients pairing to the gateway), not channel
+pairing. They are completely separate subsystems and trying to use them for Telegram
+will waste hours.
+
+**Method A — Official CLI (try this first):**
 ```bash
-nemoclaw <n> policy update --allow-host slack.com
-nemoclaw <n> policy update --allow-host api.slack.com
-nemoclaw <n> policy update --allow-host wss-primary.slack.com
+# Check if this command exists in your version:
+openclaw pairing approve --help
+# If it does, run:
+openclaw pairing approve --channel telegram --code <PAIRING_CODE>
 ```
-6. Configure in `openclaw.json`:
-```json
-{
-  "channels": {
-    "slack": {
-      "token": "<SLACK_BOT_TOKEN>",
-      "workspaceId": "<WORKSPACE_ID>",
-      "channels": ["<CHANNEL_ID>"],
-      "dmPolicy": "allowlist",
-      "allowedUsers": ["<SLACK_USER_ID>"]
-    }
-  }
-}
-```
-7. Start and test:
+
+**Method B — Read the canonical docs:**
 ```bash
-nemoclaw start
-nemoclaw <n> logs --follow | grep slack
+cat ~/.nemoclaw/source/docs/deployment/set-up-telegram-bridge.md
 ```
-Send a message in the configured channel — verify the agent responds.
+This file describes the supported approval flow for your version. Always defer to it
+over this skill file.
 
----
+**Method C — Filesystem fallback (last resort):**
+If neither A nor B works, you can write directly to the credentials files. The
+credentials directory is `/sandbox/.openclaw-data/credentials/` and it IS sandbox-writable.
 
-### Discord
-
-**Egress domains needed:** `discord.com`, `gateway.discord.gg`
-
-1. Create a bot at https://discord.com/developers/applications → "New Application"
-2. Under Bot tab → copy the Bot Token
-3. Under OAuth2 → URL Generator, select scopes `bot` with permissions: Send Messages, Read Message History
-4. Use the generated URL to invite the bot to your server
-5. Get server ID and channel ID(s): enable Developer Mode in Discord settings, right-click → "Copy ID"
-6. Add to egress whitelist:
 ```bash
-nemoclaw <n> policy update --allow-host discord.com
-nemoclaw <n> policy update --allow-host gateway.discord.gg
+# From inside the sandbox (nemoclaw <n> connect first)
+echo '{"version":1,"allowFrom":["<TELEGRAM_USER_ID>"]}' > /sandbox/.openclaw-data/credentials/telegram-main-allowFrom.json
+echo '{"version":1,"requests":[]}' > /sandbox/.openclaw-data/credentials/telegram-pairing.json
 ```
-7. Configure in `openclaw.json`:
-```json
-{
-  "channels": {
-    "discord": {
-      "token": "<DISCORD_BOT_TOKEN>",
-      "serverId": "<SERVER_ID>",
-      "channels": ["<CHANNEL_ID>"],
-      "dmPolicy": "allowlist",
-      "allowedUsers": ["<DISCORD_USER_ID>"]
-    }
-  }
-}
-```
-8. Start and test:
+
+**File path naming convention:**
+- `telegram-{accountId}-allowFrom.json` — list of approved Telegram user IDs for that bot account
+- `telegram-pairing.json` — pending pairing requests
+- `{accountId}` is `main` by default. If you have multiple Telegram bots configured,
+  each gets its own `allowFrom` file with its account ID.
+
+After writing these files, the bot will respond to the approved user immediately.
+
+#### Step 7: Test
+Send a real message to the bot from the approved user and verify it responds.
 ```bash
-nemoclaw start
-nemoclaw <n> logs --follow | grep discord
+nemoclaw <n> logs --follow | grep telegram
 ```
 
 ---
 
-### Custom Webhook
+### Slack, Discord, Custom webhooks (experimental)
 
-**Egress domains needed:** the domain of your webhook endpoint
+⚠️ **As of this writing, only Telegram has been thoroughly battle-tested in this skill.**
+Slack, Discord, and custom webhook integrations may have their own undocumented pairing
+or approval flows similar to Telegram's. Before relying on them in production:
 
-1. Determine your webhook URL and any authentication headers
-2. Add the webhook domain to egress whitelist:
-```bash
-nemoclaw <n> policy update --allow-host your-webhook-domain.com
-```
-3. Configure in `openclaw.json`:
-```json
-{
-  "channels": {
-    "webhook": {
-      "url": "https://your-webhook-domain.com/endpoint",
-      "method": "POST",
-      "headers": {
-        "Authorization": "Bearer <TOKEN>"
-      },
-      "events": ["message", "action", "error"]
-    }
-  }
-}
-```
-4. Test by triggering an agent action and verifying the webhook receives the payload.
+1. Check `~/.nemoclaw/source/docs/deployment/` for plugin-specific setup docs
+2. Run `nemoclaw <n> policy-add` and check which presets exist for these plugins —
+   if there's no preset, the integration may be alpha
+3. Test in a throwaway sandbox first (use the reset script to clean between runs)
+4. If the bot doesn't respond after setup, check for a pairing/approval flow analogous
+   to Telegram's — look in `/sandbox/.openclaw-data/credentials/` for plugin-specific
+   credential files
+
+If these instructions for Telegram look familiar, that's a good sign you're hitting the
+same kind of pairing-not-documented issue. Apply the same investigation pattern:
+read the source docs, check the credentials directory, look for `*-allowFrom.json` files.
 
 ---
 
@@ -163,8 +155,8 @@ MSGRAPH_CLIENT_SECRET=xxxx
 
 3. Add to egress whitelist:
 ```bash
-nemoclaw <n> policy update --allow-host graph.microsoft.com
-nemoclaw <n> policy update --allow-host login.microsoftonline.com
+nemoclaw <n> policy-add
+# Select Microsoft Graph preset, or add the two domains as custom hosts
 ```
 
 4. Optional L7 restrictions (Module F) — restrict the agent to safe operations:
@@ -179,7 +171,6 @@ network:
 5. Security guardrails:
    - Restrict SharePoint access to specific site IDs
    - Limit `Mail.Send` to specific recipients or domains
-   - Log all Graph API interactions in `audit.json`
    - Never grant `Files.ReadWrite.All` unless absolutely necessary
 
 6. Test:
@@ -188,16 +179,26 @@ nemoclaw <n> connect
 sandbox@<n>:~$ openclaw agent --agent main --local -m "list my recent emails" --session-id test
 ```
 
+⚠️ Like the other plugins, Microsoft Graph integration may have undocumented setup
+requirements specific to your NemoClaw version. Check `~/.nemoclaw/source/docs/` for
+authoritative guidance before relying on it.
+
 ---
 
 ## Common Steps for Any Integration
 
 Regardless of which plugin or API you're adding:
 
-1. **Egress:** Add every required domain to `allowedEgressHosts` or via
-   `nemoclaw <n> policy update --allow-host <domain>`
+1. **Egress:** Use `nemoclaw <n> policy-add` to add presets or custom hosts. Do NOT try
+   `policy update --allow-host` — that flag does not exist.
 2. **Credentials:** Store tokens in `~/nemoclaw-project/.env` (mode 600), never in code
-3. **L7 restrictions (if Module F selected):** For any API that supports destructive
+3. **Config edits:** Always happen on the host. `openclaw.json` inside the sandbox is
+   read-only (mode 444, root-owned). Re-run `nemoclaw onboard` or use `policy-add` to
+   change config.
+4. **L7 restrictions (if Module F selected):** For any API that supports destructive
    operations (DELETE, PUT), consider restricting to safe methods only
-4. **Audit:** Verify interactions appear in `~/ta-agent/logs/audit.json`
 5. **Test connectivity** from inside the sandbox before relying on the integration
+6. **For pairing/approval issues:** Check `/sandbox/.openclaw-data/credentials/` for
+   plugin-specific files. Most channel plugins use `*-allowFrom.json` to track approved
+   users. The Control UI WebSocket is for **device** pairing only — never use it for
+   channel users.

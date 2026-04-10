@@ -28,6 +28,29 @@ groups    # must include 'docker'
 docker ps # must succeed without sudo
 ```
 
+### 2.2a Workaround for AI agents running in the same shell
+
+If you (the AI agent) added the user to the docker group earlier in this same session,
+`newgrp docker` will not propagate cleanly because you can't replace your own shell.
+**Until the user starts a new SSH session, prefix every Docker-dependent command with**
+`sg docker -c "..."`:
+
+```bash
+# Instead of: docker info
+sg docker -c "docker info"
+
+# Instead of: docker run hello-world
+sg docker -c "docker run hello-world"
+
+# Instead of: nemoclaw onboard (which calls Docker internally)
+sg docker -c "nemoclaw onboard"
+```
+
+`sg docker -c` runs a single command with the docker group active without needing a new
+shell. This is the cleanest workaround for any session where group membership was just
+added. Tell the user once they finish this setup, they should reconnect SSH so future
+commands work without the prefix.
+
 ### 2.3 Configure cgroup v2 host mode
 The `nemoclaw onboard` wizard checks for this. Set it preemptively:
 

@@ -92,13 +92,9 @@ Check logs for successful spawn:
 nemoclaw <n> logs --follow | grep "sessions_spawn"
 ```
 
-### 6.6 Tiered Model Routing (Module C)
+### 6.6 Tiered Model Routing for Sub-Agents
 
-This section applies if Module C (tiered routing) was selected in Tier 2B.
-It works with or without sub-agents — the difference is how the tiers are used.
-
-**With sub-agents (Module B + C):** Each tier maps to a named agent in `agents.list`.
-The router agent classifies requests and delegates to the appropriate specialist:
+Configure different models for different complexity tiers in `agents.list`:
 
 ```json
 {
@@ -106,7 +102,6 @@ The router agent classifies requests and delegates to the appropriate specialist
     "list": {
       "router": {
         "model": "gpt-4o-mini",
-        "allowAgents": ["researcher", "coder"],
         "description": "Classifies incoming requests and delegates"
       },
       "researcher": {
@@ -122,37 +117,8 @@ The router agent classifies requests and delegates to the appropriate specialist
 }
 ```
 
-**Without sub-agents (Module C only):** Use a single `main` agent but configure
-model overrides for different task types. The agent switches models based on
-complexity without spawning separate sessions:
-
-```json
-{
-  "agents": {
-    "list": {
-      "main": {
-        "model": "nvidia/nemotron-3-super-120b-a12b",
-        "modelOverrides": {
-          "simple": "gpt-4o-mini",
-          "coding": "claude-sonnet-4-6",
-          "executive": "claude-opus-4-6"
-        }
-      }
-    }
-  }
-}
-```
-
-**Cost tier reference:**
-
-| Tier | Use case | Example model | Cost |
-|------|----------|--------------|------|
-| Lookup | Simple factual queries | gpt-4o-mini | Lowest |
-| Analytical | Summaries, comparisons | nvidia/nemotron-3-super-120b-a12b | Low-Medium |
-| Coding | Debugging, code gen | claude-sonnet-4-6 | Medium-High |
-| Executive | Strategy, multi-phase plans | claude-opus-4-6 | Highest |
-
-This can reduce costs by 80-90% compared to using a single high-reasoning model.
+This can reduce costs by 80-90% compared to using a single high-reasoning model
+for all tasks.
 
 ## Troubleshooting
 

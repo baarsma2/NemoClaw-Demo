@@ -4,6 +4,21 @@
 Configure private networking to avoid exposing the Control UI or WebSocket gateway
 to the public internet. Two approaches: Tailscale (recommended) or SSH tunneling.
 
+## ⚠️ Critical: Control UI is for device pairing, NOT channel pairing
+
+The Control UI WebSocket at port 18789 handles **device pairing** — that is, browser
+or CLI clients pairing to the gateway so they can chat with the agent. It does **NOT**
+approve Telegram, Slack, or Discord users.
+
+If you're trying to approve a Telegram (or other channel) user, **stop reading this
+file and go to Phase 7**. The Control UI WebSocket has nothing to do with channel
+pairing. Trying to use `device.pair.approve` RPC methods to approve a Telegram user
+will waste hours and never work.
+
+For canonical info on the difference, read `~/.nemoclaw/source/docs/deployment/set-up-telegram-bridge.md`.
+
+---
+
 ## Option A: Tailscale Private Networking (Recommended)
 
 ### 5.1 Install Tailscale
@@ -39,6 +54,8 @@ On your local machine (also on the tailnet):
 http://100.x.x.x:18789
 ```
 
+---
+
 ## Option B: SSH Tunneling (Fallback)
 
 If Tailscale is not used, access the Control UI via SSH tunnel.
@@ -50,6 +67,18 @@ ssh -i <key.pem> -p 2222 -L 18789:127.0.0.1:18789 ubuntu@<public-ip>
 ```
 
 Then open in browser: `http://127.0.0.1:18789`
+
+### 5.6a Alternative: openshell ssh-proxy
+
+OpenShell ships its own SSH proxy that handles gateway auth automatically. The correct
+flag is `--gateway-name`, NOT `--gateway`:
+
+```bash
+openshell ssh-proxy --gateway-name nemoclaw --name <sandbox-name>
+```
+
+Run `openshell ssh-proxy --help` to see all available flags. Do not guess flag names —
+the postmortem confirms `--gateway` is wrong and `--gateway-name` is correct.
 
 ### 5.7 Handle Gateway Auth Token
 The browser may show a "device identity required" error over tunneled connections.
@@ -66,6 +95,24 @@ http://127.0.0.1:18789/#token=REAL_TOKEN
 ```
 
 **Use an incognito/private browser window** to avoid stale localStorage issues.
+
+### 5.7a WebSocket 1008 Policy Violation errors
+
+If you try to script against the Control UI WebSocket and get `1008 Policy Violation`
+on connect, this is the gateway rejecting your auth payload. Common causes:
+
+- Sending a `device` object before completing the challenge-response handshake
+- Wrong field order in the signed payload
+- Missing or malformed Origin header
+- Trying to use `dangerouslyDisableDeviceAuth` while also passing a device object
+  (these conflict)
+
+**The fix is almost never to dig deeper into the WebSocket protocol.** If you got here
+trying to approve Telegram pairing, you're in the wrong subsystem entirely — go to
+Phase 7. If you got here for legitimate device pairing, use the Control UI in a browser
+(Section 5.7) instead of scripting against the WebSocket.
+
+---
 
 ## VSCode SSH Tunnel Note
 If you're already connected via VSCode Remote SSH on port 2222, you can set up
