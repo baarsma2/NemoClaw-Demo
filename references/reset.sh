@@ -2,25 +2,32 @@
 # nemoclaw-reset.sh
 #
 # Nukes a NemoClaw installation and all associated state so you can test your
-# skill repeatedly from a clean slate. LEAVES INTACT: Docker, Node.js, Claude
-# Code, your project folder, the skill itself, your .bashrc PATH entries.
+# skill repeatedly from a clean slate.
 #
-# REMOVES:
-#   - ~/.nemoclaw (NemoClaw install + source repo)
-#   - ~/.local/bin/nemoclaw (binary)
-#   - /var/nemoclaw (sandbox data)
+# LEAVES INTACT:
+#   - Docker, Node.js, Claude Code
+#   - Your project folder and any user-created files inside it
+#   - The skill itself
+#   - SSH hardening (UFW, port changes, sshd_config)
+#
+# REMOVES (only things NemoClaw itself creates/installs):
+#   - ~/.nemoclaw                                   (NemoClaw install + source repo)
+#   - ~/.local/bin/nemoclaw, ~/.local/bin/openshell (binaries)
+#   - ~/.npm-global/bin/nemoclaw, ~/.npm-global/lib/node_modules/nemoclaw (npm install, if any)
+#   - /var/nemoclaw                                 (sandbox data, requires sudo)
 #   - All NemoClaw Docker containers and images
 #   - The OpenShell Docker volume
-#   - Artifact files created during setup debugging:
-#       * ~/nemoclaw-project/.env
-#       * ~/nemoclaw-project/approve-pairing.js (if created)
-#       * ~/nemoclaw-project/node_modules/ (if ws was installed for WebSocket debug)
-#       * ~/nemoclaw-project/host-tree.txt, tree-*.txt (diagnostic dumps)
-#       * ~/nemoclaw-project/postmortem.md (if created)
-#   - .bashrc entries for NemoClaw PATH and env vars
+#   - ~/.config/openshell                           (OpenShell gateway state, certs, SSH config)
+#   - ~/.agents/.skill-lock.json                    (NemoClaw skill lock file)
+#   - NemoClaw-related lines from ~/.bashrc
 #
 # Usage:
 #   bash ~/.claude/skills/nemoclaw-setup/references/reset.sh
+#
+# NOTE: This script intentionally does NOT touch your project folder or any
+# user-created files (claude.md, .env, scripts, etc). If you want to clean
+# those, delete them manually or re-run `nemoclaw onboard` which will overwrite
+# the credentials.
 #
 # Safety: prompts for confirmation before doing anything destructive.
 
@@ -47,6 +54,8 @@ docker stop $(docker ps -q) 2>/dev/null || true
 echo "→ Removing NemoClaw installation and source repo..."
 rm -rf ~/.nemoclaw
 rm -f ~/.local/bin/nemoclaw
+rm -f ~/.local/bin/openshell
+npm uninstall -g nemoclaw 2>/dev/null || rm -rf ~/.npm-global/lib/node_modules/nemoclaw ~/.npm-global/bin/nemoclaw 2>/dev/null || true
 
 echo "→ Removing NemoClaw sandbox data directory..."
 sudo rm -rf /var/nemoclaw 2>/dev/null || true
@@ -58,21 +67,16 @@ docker rmi -f ghcr.io/nvidia/openshell-community/sandboxes/openclaw:latest 2>/de
 echo "→ Removing OpenShell Docker volume..."
 docker volume rm openshell-cluster-nemoclaw 2>/dev/null || true
 
-echo "→ Cleaning up project folder artifacts..."
-rm -f ~/nemoclaw-project/.env
-rm -f ~/nemoclaw-project/approve-pairing.js
-rm -rf ~/nemoclaw-project/node_modules
-rm -f ~/nemoclaw-project/host-tree.txt
-rm -f ~/nemoclaw-project/tree-*.txt
-rm -f ~/nemoclaw-project/postmortem.md
-rm -rf ~/nemoclaw-project/.claude
+echo "→ Removing OpenShell config state..."
+rm -rf ~/.config/openshell
+
+echo "→ Removing NemoClaw skill lock file..."
+rm -f ~/.agents/.skill-lock.json
 
 echo "→ Cleaning .bashrc of NemoClaw entries..."
-sed -i '/\.local\/bin/d' ~/.bashrc 2>/dev/null || true
 sed -i '/nemoclaw/d' ~/.bashrc 2>/dev/null || true
 sed -i '/NVIDIA_API_KEY/d' ~/.bashrc 2>/dev/null || true
 sed -i '/NEMOCLAW/d' ~/.bashrc 2>/dev/null || true
-sed -i '/nemoclaw-project\/.env/d' ~/.bashrc 2>/dev/null || true
 
 echo ""
 echo "✅ Reset complete. Verifying clean state..."
@@ -94,11 +98,18 @@ else
     echo "  ✅ ~/.nemoclaw removed"
 fi
 
-if [ -f ~/nemoclaw-project/.env ]; then
-    echo "  ❌ ~/nemoclaw-project/.env still exists"
+if [ -d ~/.config/openshell ]; then
+    echo "  ❌ ~/.config/openshell still exists"
     FAIL=1
 else
-    echo "  ✅ ~/nemoclaw-project/.env removed"
+    echo "  ✅ ~/.config/openshell removed"
+fi
+
+if [ -f ~/.agents/.skill-lock.json ]; then
+    echo "  ❌ skill lock file still exists"
+    FAIL=1
+else
+    echo "  ✅ skill lock file removed"
 fi
 
 if docker images 2>/dev/null | grep -q openclaw; then
@@ -109,10 +120,10 @@ fi
 
 echo ""
 if [ $FAIL -eq 0 ]; then
-    echo "Clean state verified. You can now:"
-    echo "  1. cd ~/nemoclaw-project"
-    echo "  2. claude"
-    echo "  3. Run the skill from scratch"
+    echo "Clean state verified. NemoClaw has been fully removed."
+    echo "Your project folder and any files inside it were NOT touched."
+    echo ""
+    echo "To re-run the skill: cd into your project folder and run 'claude'."
 else
     echo "⚠️  Some items were not cleaned. Check the failures above."
 fi
