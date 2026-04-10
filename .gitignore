@@ -1,4 +1,6 @@
 # Project-local files — not part of the published skill
+.gitignore
+.claude/
 claude.md
 CLAUDE.md
 .env
